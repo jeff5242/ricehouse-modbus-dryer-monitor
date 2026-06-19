@@ -1,0 +1,22 @@
+{
+  "name": "大橋米烘乾監控系統",
+  "short_name": "烘乾監控",
+  "description": "稻穀烘乾機即時監控 - 壽米屋",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#0d9488",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

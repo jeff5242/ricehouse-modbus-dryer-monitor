@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/poll-modbus",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
