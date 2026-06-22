@@ -24,6 +24,7 @@ export const dynamic = "force-dynamic";
 
 const DEVICE_COUNT = 10;
 const DRYING_STATUSES = new Set([0x06, 0x07]);
+const MOISTURE_APPROACHING_THRESHOLD_PCT = 2.0;
 
 interface StatusTransition {
   deviceId: number;
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
     (prevStatuses ?? []).map((s) => [s.dryer_id, s.status_code as number])
   );
   const transitions: StatusTransition[] = [];
+  const currentDryerStatusMap = new Map<number, number>();
 
   const conn: ModbusConnection = {
     host: process.env.NPORT_HOST!,
@@ -126,6 +128,7 @@ export async function GET(request: NextRequest) {
             newStatus: data.statusCode,
           });
         }
+        currentDryerStatusMap.set(i + 1, data.statusCode);
 
         if (data.isOnline && data.modelCode > 0) {
           await supabase
@@ -232,6 +235,22 @@ export async function GET(request: NextRequest) {
           });
         }
 
+        const isDryerActive = DRYING_STATUSES.has(
+          currentDryerStatusMap.get(i + 1) ?? 0xff
+        );
+        if (
+          isDryerActive &&
+          data.lastMoistureValue !== null &&
+          data.moistureSetting !== null
+        ) {
+          await checkMoistureApproaching(
+            supabase,
+            i + 1,
+            data.lastMoistureValue,
+            data.moistureSetting
+          );
+        }
+
         if (data.errorCode > 0) {
           await handleAlert(
             supabase,
@@ -279,6 +298,7 @@ async function resolveAlerts(
     .update({ is_resolved: true, resolved_at: new Date().toISOString() })
     .eq("device_type", deviceType)
     .eq("device_id", deviceId)
+    .eq("alert_type", "error")
     .eq("is_resolved", false);
 }
 
@@ -324,75 +344,163 @@ async function processDryingTransitions(
     const isDrying = DRYING_STATUSES.has(t.newStatus);
 
     if (!wasDrying && isDrying) {
-      const { data: moisture } = await supabase
-        .from(TABLE.MOISTURE_STATUS)
-        .select("moisture_setting, last_moisture_value, grain_type, grain_type_name")
-        .eq("meter_id", t.deviceId)
-        .single();
-
-      await supabase
-        .from(TABLE.DRYING_BATCHES)
-        .update({ is_active: false, ended_at: new Date().toISOString() })
-        .eq("dryer_id", t.deviceId)
-        .eq("is_active", true);
-
-      await supabase.from(TABLE.DRYING_BATCHES).insert({
-        dryer_id: t.deviceId,
-        initial_moisture: moisture?.last_moisture_value ?? null,
-        target_moisture: moisture?.moisture_setting ?? null,
-        grain_type: moisture?.grain_type ?? null,
-        grain_type_name: moisture?.grain_type_name ?? null,
-        is_active: true,
-      });
-    }
-
-    if (wasDrying && !isDrying) {
-      const { data: batch } = await supabase
-        .from(TABLE.DRYING_BATCHES)
-        .select("id, started_at")
-        .eq("dryer_id", t.deviceId)
-        .eq("is_active", true)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (batch) {
+      try {
         const { data: moisture } = await supabase
           .from(TABLE.MOISTURE_STATUS)
-          .select("last_moisture_value")
+          .select("moisture_setting, last_moisture_value, grain_type, grain_type_name")
           .eq("meter_id", t.deviceId)
           .single();
 
-        const durationMs = Date.now() - new Date(batch.started_at).getTime();
-        const durationMinutes = Math.round(durationMs / 60000);
-
         await supabase
           .from(TABLE.DRYING_BATCHES)
-          .update({
-            is_active: false,
-            ended_at: new Date().toISOString(),
-            final_moisture: moisture?.last_moisture_value ?? null,
-            duration_minutes: durationMinutes,
-          })
-          .eq("id", batch.id);
+          .update({ is_active: false, ended_at: new Date().toISOString() })
+          .eq("dryer_id", t.deviceId)
+          .eq("is_active", true);
 
-        const isComplete = t.newStatus === 0x0a || t.newStatus === 0x08;
-        if (isComplete) {
+        await supabase.from(TABLE.DRYING_BATCHES).insert({
+          dryer_id: t.deviceId,
+          initial_moisture: moisture?.last_moisture_value ?? null,
+          target_moisture: moisture?.moisture_setting ?? null,
+          grain_type: moisture?.grain_type ?? null,
+          grain_type_name: moisture?.grain_type_name ?? null,
+          is_active: true,
+        });
+      } catch {
+        // batch table may not exist yet
+      }
+    }
+
+    if (wasDrying && !isDrying) {
+      await supabase
+        .from(TABLE.ALERTS)
+        .update({ is_resolved: true, resolved_at: new Date().toISOString() })
+        .eq("device_type", "moisture_meter")
+        .eq("device_id", t.deviceId)
+        .eq("alert_type", "moisture_approaching")
+        .eq("is_resolved", false);
+
+      let durationMinutes: number | null = null;
+      let finalMoisture: number | null = null;
+
+      try {
+        const { data: batch } = await supabase
+          .from(TABLE.DRYING_BATCHES)
+          .select("id, started_at")
+          .eq("dryer_id", t.deviceId)
+          .eq("is_active", true)
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (batch) {
+          const { data: moisture } = await supabase
+            .from(TABLE.MOISTURE_STATUS)
+            .select("last_moisture_value")
+            .eq("meter_id", t.deviceId)
+            .single();
+
+          finalMoisture = moisture?.last_moisture_value ?? null;
+          const durationMs = Date.now() - new Date(batch.started_at).getTime();
+          durationMinutes = Math.round(durationMs / 60000);
+
+          await supabase
+            .from(TABLE.DRYING_BATCHES)
+            .update({
+              is_active: false,
+              ended_at: new Date().toISOString(),
+              final_moisture: finalMoisture,
+              duration_minutes: durationMinutes,
+            })
+            .eq("id", batch.id);
+        }
+      } catch {
+        // batch table may not exist yet
+      }
+
+      const isComplete = t.newStatus === 0x0a || t.newStatus === 0x08;
+      if (isComplete) {
+        if (finalMoisture === null) {
+          const { data: moisture } = await supabase
+            .from(TABLE.MOISTURE_STATUS)
+            .select("last_moisture_value")
+            .eq("meter_id", t.deviceId)
+            .single();
+          finalMoisture = moisture?.last_moisture_value ?? null;
+        }
+
+        const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+        let msg = `\n✅ ${t.deviceId}號乾燥機烘乾完成！`;
+
+        if (durationMinutes !== null) {
           const hours = Math.floor(durationMinutes / 60);
           const mins = durationMinutes % 60;
           const timeStr = hours > 0 ? `${hours}小時${mins}分` : `${mins}分鐘`;
-          const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-
-          await sendLineNotify(
-            `\n✅ ${t.deviceId}號乾燥機烘乾完成！` +
-            `\n烘乾時間: ${timeStr}` +
-            (moisture?.last_moisture_value != null
-              ? `\n最終水分: ${moisture.last_moisture_value}%`
-              : "") +
-            `\n完成時間: ${now}`
-          );
+          msg += `\n烘乾時間: ${timeStr}`;
         }
+
+        if (finalMoisture !== null) {
+          msg += `\n最終水分: ${finalMoisture}%`;
+        }
+
+        msg += `\n完成時間: ${now}`;
+
+        await sendLineNotify(msg);
+
+        const alertMsg = `${t.deviceId}號乾燥機烘乾完成` +
+          (finalMoisture !== null ? `，最終水分 ${finalMoisture}%` : "");
+
+        await supabase.from(TABLE.ALERTS).insert({
+          device_type: "dryer",
+          device_id: t.deviceId,
+          alert_type: "drying_complete",
+          error_code: 0,
+          message: alertMsg,
+          notified_at: new Date().toISOString(),
+        });
       }
     }
   }
+}
+
+async function checkMoistureApproaching(
+  supabase: ReturnType<typeof createServiceClient>,
+  deviceId: number,
+  moistureValue: number,
+  moistureSetting: number
+) {
+  if (moistureValue <= moistureSetting) return;
+
+  const gap = moistureValue - moistureSetting;
+  if (gap > MOISTURE_APPROACHING_THRESHOLD_PCT) return;
+
+  const { data: existing } = await supabase
+    .from(TABLE.ALERTS)
+    .select("id")
+    .eq("device_type", "moisture_meter")
+    .eq("device_id", deviceId)
+    .eq("alert_type", "moisture_approaching")
+    .eq("is_resolved", false)
+    .limit(1);
+
+  if (existing && existing.length > 0) return;
+
+  const message = `${deviceId}號乾燥機水分接近目標: 目前 ${moistureValue}%，目標 ${moistureSetting}%`;
+
+  await supabase.from(TABLE.ALERTS).insert({
+    device_type: "moisture_meter",
+    device_id: deviceId,
+    alert_type: "moisture_approaching",
+    error_code: 0,
+    message,
+    notified_at: new Date().toISOString(),
+  });
+
+  const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+  await sendLineNotify(
+    `\n📢 ${deviceId}號乾燥機水分接近目標！` +
+      `\n目前水分: ${moistureValue}%` +
+      `\n目標水分: ${moistureSetting}%` +
+      `\n差距: ${gap.toFixed(1)}%` +
+      `\n時間: ${now}`
+  );
 }

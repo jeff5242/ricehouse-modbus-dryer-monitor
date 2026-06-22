@@ -5,6 +5,7 @@ import { createBrowserClient } from "@/lib/supabase";
 import { AlertBanner } from "./alert-banner";
 import { TrendChart } from "./trend-chart";
 import type { DryerStatus, MoistureStatus, Alert } from "@/lib/types";
+import type { DryingEstimate } from "@/lib/drying-estimate";
 import { TABLE } from "@/lib/db-tables";
 
 const DEVICE_COUNT = 8;
@@ -86,14 +87,44 @@ function rowBorder(code: number, isOnline: boolean, hasError: boolean) {
   }
 }
 
+function formatEstimateTime(ts: number): string {
+  const date = new Date(ts);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  if (isToday) {
+    return date.toLocaleTimeString("zh-TW", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
+  return date.toLocaleString("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatEtaDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return `${h}h${m.toString().padStart(2, "0")}m`;
+  return `${m}m`;
+}
+
 interface DeviceRowProps {
   id: number;
   dryer: DryerStatus | undefined;
   moisture: MoistureStatus | undefined;
+  estimate: DryingEstimate | undefined;
   onTrend: () => void;
 }
 
-function DeviceRow({ id, dryer, moisture, onTrend }: DeviceRowProps) {
+function DeviceRow({ id, dryer, moisture, estimate, onTrend }: DeviceRowProps) {
   const isOnline = dryer?.is_online ?? false;
   const statusCode = dryer?.status_code ?? 0xff;
   const statusName = dryer?.status_name ?? "未知";
@@ -148,16 +179,32 @@ function DeviceRow({ id, dryer, moisture, onTrend }: DeviceRowProps) {
           </>
         )}
 
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={onTrend}
-            className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium active:bg-blue-100"
-          >
-            趨勢
-          </button>
-          <span className="text-[10px] text-gray-300">
-            {formatUpdatedAt(dryer?.updated_at, moisture?.updated_at)}
-          </span>
+        <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onTrend}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium active:bg-blue-100"
+            >
+              趨勢
+            </button>
+            <span className="text-[10px] text-gray-300">
+              {formatUpdatedAt(dryer?.updated_at, moisture?.updated_at)}
+            </span>
+          </div>
+          {estimate?.completionTimestamp != null && estimate.etaMinutes != null && (
+            <button
+              onClick={onTrend}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium active:bg-indigo-100 flex items-center gap-1"
+            >
+              <span className="text-[8px] bg-indigo-200 text-indigo-700 rounded px-0.5 font-bold">
+                估
+              </span>
+              {formatEstimateTime(estimate.completionTimestamp)} 完成
+              <span className="text-indigo-400">
+                ({formatEtaDuration(estimate.etaMinutes)})
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -214,9 +261,20 @@ export function Dashboard() {
   const [dryers, setDryers] = useState<DryerStatus[]>([]);
   const [moistures, setMoistures] = useState<MoistureStatus[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [estimates, setEstimates] = useState<Record<number, DryingEstimate>>({});
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [polling, setPolling] = useState(false);
   const [trendDeviceId, setTrendDeviceId] = useState<number | null>(null);
+
+  async function refreshEstimates() {
+    try {
+      const res = await fetch("/api/estimates");
+      const json = await res.json();
+      if (json.estimates) setEstimates(json.estimates);
+    } catch {
+      // non-critical
+    }
+  }
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -243,6 +301,7 @@ export function Dashboard() {
       if (moistureRes.data) setMoistures(moistureRes.data);
       if (alertRes.data) setAlerts(alertRes.data);
       setLastUpdate(new Date());
+      refreshEstimates();
     }
 
     fetchData();
@@ -279,6 +338,7 @@ export function Dashboard() {
             )
           );
           setLastUpdate(new Date());
+          refreshEstimates();
         }
       )
       .subscribe();
@@ -305,6 +365,7 @@ export function Dashboard() {
     setPolling(true);
     try {
       await fetch("/api/trigger-poll", { method: "POST" });
+      await refreshEstimates();
     } finally {
       setPolling(false);
     }
@@ -386,6 +447,7 @@ export function Dashboard() {
               id={id}
               dryer={dryer}
               moisture={moisture}
+              estimate={estimates[id]}
               onTrend={() => setTrendDeviceId(id)}
             />
           ))}

@@ -12,6 +12,11 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import {
+  calculateDryingEstimate,
+  type DryingEstimate,
+  type MoisturePoint,
+} from "@/lib/drying-estimate";
 
 interface DryerReading {
   hot_air_temp: number | null;
@@ -165,6 +170,15 @@ export function TrendChart({ deviceId, onClose }: TrendChartProps) {
       </div>
     );
   }
+
+  const moisturePoints: MoisturePoint[] = data
+    .filter((d): d is ChartData & { moistureValue: number } => d.moistureValue !== null)
+    .map((d) => ({ timestamp: d.timestamp, moisture: d.moistureValue }));
+
+  const estimate: DryingEstimate | null =
+    moistureSetting !== null
+      ? calculateDryingEstimate(moisturePoints, moistureSetting)
+      : null;
 
   const LABELS: Record<string, string> = {
     hotAirTemp: "熱風溫度",
@@ -480,6 +494,10 @@ export function TrendChart({ deviceId, onClose }: TrendChartProps) {
             </div>
           )}
 
+          {estimate && (
+            <EstimatePanel estimate={estimate} />
+          )}
+
           {data.length === 0 && (
             <div className="text-center text-gray-400 py-8">
               暫無歷史資料
@@ -487,6 +505,102 @@ export function TrendChart({ deviceId, onClose }: TrendChartProps) {
           )}
         </div>
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatCompletionTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function confidenceLabel(rSquared: number, count: number): string {
+  if (count >= 8 && rSquared >= 0.8) return "高";
+  if (count >= 5 && rSquared >= 0.5) return "中";
+  return "低";
+}
+
+function confidenceDots(rSquared: number, count: number): string {
+  const level =
+    count >= 8 && rSquared >= 0.8 ? 3
+      : count >= 5 && rSquared >= 0.5 ? 2
+        : 1;
+  return "●".repeat(level) + "○".repeat(3 - level);
+}
+
+function EstimatePanel({ estimate }: { estimate: DryingEstimate }) {
+  const conf = confidenceLabel(estimate.rSquared, estimate.dataPointCount);
+  const dots = confidenceDots(estimate.rSquared, estimate.dataPointCount);
+  const isReached = estimate.currentMoisture <= estimate.peakMoisture * 0.5;
+
+  return (
+    <div className="mx-2 mb-4 rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-indigo-800">
+          📊 烘乾推估
+        </h3>
+        <span className="text-[10px] text-indigo-400">
+          {dots} 信心{conf} | 取樣 {estimate.dataPointCount} 點
+        </span>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-indigo-600 bg-indigo-100 rounded px-1 font-bold">
+              估
+            </span>
+            <span className="text-xs text-gray-500">已烘乾</span>
+          </div>
+          <span className="text-sm font-bold text-gray-700">
+            {formatDuration(estimate.estimatedElapsedMinutes)}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500">水分變化</span>
+          <span className="text-xs text-gray-700">
+            {estimate.peakMoisture}% → {estimate.currentMoisture}%
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500">下降速率</span>
+          <span className="text-xs text-gray-700">
+            {Math.abs(estimate.ratePerHour).toFixed(2)} %/小時
+          </span>
+        </div>
+
+        {estimate.etaMinutes !== null && estimate.completionTimestamp !== null && (
+          <div className="flex items-center justify-between pt-1 border-t border-indigo-100">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-indigo-600 bg-indigo-100 rounded px-1 font-bold">
+                估
+              </span>
+              <span className="text-xs text-gray-500">預計完成</span>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-bold text-indigo-700">
+                {formatCompletionTime(estimate.completionTimestamp)}
+              </span>
+              <span className="text-[10px] text-gray-400 ml-1">
+                (約{formatDuration(estimate.etaMinutes)}後)
+              </span>
+            </div>
+          </div>
+        )}
+
+        {estimate.etaMinutes === null && estimate.currentMoisture <= estimate.peakMoisture * 0.6 && (
+          <div className="flex items-center justify-between pt-1 border-t border-indigo-100">
+            <span className="text-xs text-green-600 font-bold">
+              ✅ 水分已達標或接近目標
+            </span>
+          </div>
         )}
       </div>
     </div>
