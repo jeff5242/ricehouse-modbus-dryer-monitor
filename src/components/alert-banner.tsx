@@ -27,14 +27,14 @@ function alertStyle(alertType: string): AlertStyleSet {
         date: "text-green-500",
         btn: "text-green-300 hover:text-green-500",
       };
-    case "moisture_approaching":
+    case "moisture_reached":
       return {
-        bg: "bg-amber-50 border-amber-200",
-        icon: "📢",
-        iconColor: "text-amber-500",
-        title: "text-amber-800",
-        date: "text-amber-500",
-        btn: "text-amber-300 hover:text-amber-500",
+        bg: "bg-blue-50 border-blue-200",
+        icon: "✅",
+        iconColor: "text-blue-500",
+        title: "text-blue-800",
+        date: "text-blue-500",
+        btn: "text-blue-300 hover:text-blue-500",
       };
     default:
       return {

@@ -16,7 +16,7 @@ import {
   RS485_BUS_INTERVAL_MS,
 } from "@/lib/modbus/constants";
 import { parseDryerRegisters, parseMoistureRegisters } from "@/lib/modbus/parser";
-import { sendLineNotify } from "@/lib/line-notify";
+import { sendLineFlexNotify, getSiteUrl } from "@/lib/line-notify";
 import { TABLE } from "@/lib/db-tables";
 
 export const maxDuration = 55;
@@ -24,7 +24,6 @@ export const dynamic = "force-dynamic";
 
 const DEVICE_COUNT = 10;
 const DRYING_STATUSES = new Set([0x06, 0x07]);
-const MOISTURE_APPROACHING_THRESHOLD_PCT = 2.0;
 
 interface StatusTransition {
   deviceId: number;
@@ -243,7 +242,7 @@ export async function GET(request: NextRequest) {
           data.lastMoistureValue !== null &&
           data.moistureSetting !== null
         ) {
-          await checkMoistureApproaching(
+          await checkMoistureReached(
             supabase,
             i + 1,
             data.lastMoistureValue,
@@ -330,9 +329,21 @@ async function handleAlert(
     notified_at: new Date().toISOString(),
   });
 
-  await sendLineNotify(
-    `\n🚨 ${message}\n時間: ${new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}`
-  );
+  await sendLineFlexNotify({
+    title: "設備異常警報",
+    icon: "🚨",
+    headerColor: "#DC2626",
+    sections: [
+      { label: "異常訊息", value: message },
+      {
+        label: "時間",
+        value: new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }),
+      },
+    ],
+    buttonLabel: "查看監控面板",
+    buttonUri: getSiteUrl(),
+    altText: `🚨 ${message}`,
+  });
 }
 
 async function processDryingTransitions(
@@ -376,7 +387,7 @@ async function processDryingTransitions(
         .update({ is_resolved: true, resolved_at: new Date().toISOString() })
         .eq("device_type", "moisture_meter")
         .eq("device_id", t.deviceId)
-        .eq("alert_type", "moisture_approaching")
+        .eq("alert_type", "moisture_reached")
         .eq("is_resolved", false);
 
       let durationMinutes: number | null = null;
@@ -429,22 +440,30 @@ async function processDryingTransitions(
         }
 
         const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-        let msg = `\n✅ ${t.deviceId}號乾燥機烘乾完成！`;
+        const sections: { label: string; value: string }[] = [];
 
         if (durationMinutes !== null) {
           const hours = Math.floor(durationMinutes / 60);
           const mins = durationMinutes % 60;
           const timeStr = hours > 0 ? `${hours}小時${mins}分` : `${mins}分鐘`;
-          msg += `\n烘乾時間: ${timeStr}`;
+          sections.push({ label: "烘乾時間", value: timeStr });
         }
 
         if (finalMoisture !== null) {
-          msg += `\n最終水分: ${finalMoisture}%`;
+          sections.push({ label: "最終水分", value: `${finalMoisture}%` });
         }
 
-        msg += `\n完成時間: ${now}`;
+        sections.push({ label: "完成時間", value: now });
 
-        await sendLineNotify(msg);
+        await sendLineFlexNotify({
+          title: `${t.deviceId}號乾燥機烘乾完成！`,
+          icon: "✅",
+          headerColor: "#16A34A",
+          sections,
+          buttonLabel: "查看監控面板",
+          buttonUri: getSiteUrl(),
+          altText: `✅ ${t.deviceId}號乾燥機烘乾完成`,
+        });
 
         const alertMsg = `${t.deviceId}號乾燥機烘乾完成` +
           (finalMoisture !== null ? `，最終水分 ${finalMoisture}%` : "");
@@ -462,45 +481,48 @@ async function processDryingTransitions(
   }
 }
 
-async function checkMoistureApproaching(
+async function checkMoistureReached(
   supabase: ReturnType<typeof createServiceClient>,
   deviceId: number,
   moistureValue: number,
   moistureSetting: number
 ) {
-  if (moistureValue <= moistureSetting) return;
-
-  const gap = moistureValue - moistureSetting;
-  if (gap > MOISTURE_APPROACHING_THRESHOLD_PCT) return;
+  if (moistureValue > moistureSetting) return;
 
   const { data: existing } = await supabase
     .from(TABLE.ALERTS)
     .select("id")
     .eq("device_type", "moisture_meter")
     .eq("device_id", deviceId)
-    .eq("alert_type", "moisture_approaching")
+    .eq("alert_type", "moisture_reached")
     .eq("is_resolved", false)
     .limit(1);
 
   if (existing && existing.length > 0) return;
 
-  const message = `${deviceId}號乾燥機水分接近目標: 目前 ${moistureValue}%，目標 ${moistureSetting}%`;
+  const message = `${deviceId}號乾燥機水分已達標: 目前 ${moistureValue}%，目標 ${moistureSetting}%`;
 
   await supabase.from(TABLE.ALERTS).insert({
     device_type: "moisture_meter",
     device_id: deviceId,
-    alert_type: "moisture_approaching",
+    alert_type: "moisture_reached",
     error_code: 0,
     message,
     notified_at: new Date().toISOString(),
   });
 
   const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-  await sendLineNotify(
-    `\n📢 ${deviceId}號乾燥機水分接近目標！` +
-      `\n目前水分: ${moistureValue}%` +
-      `\n目標水分: ${moistureSetting}%` +
-      `\n差距: ${gap.toFixed(1)}%` +
-      `\n時間: ${now}`
-  );
+  await sendLineFlexNotify({
+    title: `${deviceId}號水分已達標！`,
+    icon: "✅",
+    headerColor: "#2563EB",
+    sections: [
+      { label: "目前水分", value: `${moistureValue}%` },
+      { label: "目標水分", value: `${moistureSetting}%` },
+      { label: "時間", value: now },
+    ],
+    buttonLabel: "查看趨勢圖",
+    buttonUri: getSiteUrl(),
+    altText: `✅ ${deviceId}號水分已達標 ${moistureValue}%`,
+  });
 }
