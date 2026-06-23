@@ -261,7 +261,7 @@ function DeviceBlock({ id, dryer, moisture, estimate, onTrend }: DeviceBlockProp
   );
 }
 
-export function Dashboard() {
+export function DashboardIpad() {
   const [dryers, setDryers] = useState<DryerStatus[]>([]);
   const [moistures, setMoistures] = useState<MoistureStatus[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
