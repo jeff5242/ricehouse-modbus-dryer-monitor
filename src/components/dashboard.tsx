@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase";
-import { AlertBanner } from "./alert-banner";
+import { AlertBell } from "./alert-bell";
 import { TrendChart } from "./trend-chart";
 import type { DryerStatus, MoistureStatus, Alert } from "@/lib/types";
 import type { DryingEstimate } from "@/lib/drying-estimate";
@@ -116,7 +116,7 @@ function formatEtaDuration(minutes: number): string {
   return `${m}m`;
 }
 
-interface DeviceRowProps {
+interface DeviceBlockProps {
   id: number;
   dryer: DryerStatus | undefined;
   moisture: MoistureStatus | undefined;
@@ -124,7 +124,7 @@ interface DeviceRowProps {
   onTrend: () => void;
 }
 
-function DeviceRow({ id, dryer, moisture, estimate, onTrend }: DeviceRowProps) {
+function DeviceBlock({ id, dryer, moisture, estimate, onTrend }: DeviceBlockProps) {
   const isOnline = dryer?.is_online ?? false;
   const statusCode = dryer?.status_code ?? 0xff;
   const statusName = dryer?.status_name ?? "未知";
@@ -138,121 +138,125 @@ function DeviceRow({ id, dryer, moisture, estimate, onTrend }: DeviceRowProps) {
 
   return (
     <div
-      className={`rounded-lg border-2 px-3 py-2 ${rowBorder(statusCode, isOnline, hasError)}`}
+      className={`rounded-xl border-2 p-2.5 flex flex-col gap-1.5 h-full ${rowBorder(statusCode, isOnline, hasError)}`}
     >
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-baseline gap-1 shrink-0">
-          <span className="text-base font-black">{id}</span>
+      {/* Header: id + model + status badge */}
+      <div className="flex items-start justify-between gap-1">
+        <div className="flex items-baseline gap-1 min-w-0">
+          <span className="text-[30px] font-black leading-none">{id}</span>
           {modelName && (
-            <span className="text-[11px] text-gray-400">{modelName}</span>
+            <span className="text-[15px] text-gray-400 truncate">{modelName}</span>
           )}
         </div>
-
         <span
-          className={`px-2 py-0.5 rounded text-xs font-bold shrink-0 ${statusBadgeColor(statusCode, isOnline)}`}
+          className={`px-1.5 py-0.5 rounded text-[16px] font-bold shrink-0 ${statusBadgeColor(statusCode, isOnline)}`}
         >
           {statusName}
         </span>
-
-        {isOnline && (
-          <>
-            <div className="flex items-baseline gap-1 shrink-0">
-              <span className="text-sm font-bold text-red-500">
-                {dryer?.hot_air_temp ?? "--"}°C
-              </span>
-              {dryer?.hot_air_temp !== dryer?.set_temp && (
-                <span className="text-xs text-gray-400">
-                  / {dryer?.set_temp ?? "--"}°C
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-baseline gap-1 shrink-0">
-              <span className="text-[10px] text-gray-400">烘</span>
-              <span className="text-xs text-gray-500">
-                {formatTimer(
-                  dryer?.timer_display_hours ?? null,
-                  dryer?.timer_display_minutes ?? null
-                )}
-              </span>
-            </div>
-          </>
-        )}
-
-        <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={onTrend}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium active:bg-blue-100"
-            >
-              趨勢
-            </button>
-            <span className="text-[10px] text-gray-300">
-              {formatUpdatedAt(dryer?.updated_at, moisture?.updated_at)}
-            </span>
-          </div>
-          {estimate?.completionTimestamp != null && estimate.etaMinutes != null && (
-            <button
-              onClick={onTrend}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium active:bg-indigo-100 flex items-center gap-1"
-            >
-              <span className="text-[8px] bg-indigo-200 text-indigo-700 rounded px-0.5 font-bold">
-                估
-              </span>
-              {formatEstimateTime(estimate.completionTimestamp)} 完成
-              <span className="text-indigo-400">
-                ({formatEtaDuration(estimate.etaMinutes)})
-              </span>
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* Line 2: Moisture data — show whenever moisture data exists */}
-      {hasMoisture && (
-        <div className="flex items-center gap-3 mt-1 pl-0.5">
+      {/* Body: dryer data */}
+      {isOnline ? (
+        <div className="flex flex-col gap-1">
           <div className="flex items-baseline gap-1">
-            <span className="text-[10px] text-gray-400">水分</span>
-            <span className="text-sm font-bold text-blue-600">
-              {moisture.last_moisture_value ?? "--"}%
+            <span className="text-[15px] text-gray-400 w-8 shrink-0">熱風</span>
+            <span className="text-[27px] font-bold text-red-500 leading-none">
+              {dryer?.hot_air_temp ?? "--"}°C
             </span>
-            {moisture.moisture_setting !== null && (
-              <span className="text-[10px] text-gray-400">
-                / 設定 {moisture.moisture_setting}%
+            {dryer?.hot_air_temp !== dryer?.set_temp && (
+              <span className="text-[15px] text-gray-400">
+                / {dryer?.set_temp ?? "--"}°
               </span>
             )}
           </div>
 
           <div className="flex items-baseline gap-1">
-            <span className="text-[10px] text-gray-400">穀溫</span>
-            <span className="text-sm font-bold text-amber-600">
-              {moisture.grain_temp ?? "--"}°C
+            <span className="text-[15px] text-gray-400 w-8 shrink-0">烘乾</span>
+            <span className="text-[21px] font-medium text-gray-600">
+              {formatTimer(
+                dryer?.timer_display_hours ?? null,
+                dryer?.timer_display_minutes ?? null
+              )}
             </span>
           </div>
-
-          {moisture.mode && (
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                moisture.mode === "AUTO"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-gray-200 text-gray-500"
-              }`}
-            >
-              {moisture.mode}
-            </span>
-          )}
         </div>
+      ) : (
+        <div className="text-[18px] text-gray-400 py-1">離線</div>
+      )}
+
+      {/* Moisture data — show whenever moisture data exists */}
+      {hasMoisture && (
+        <div className="flex flex-col gap-1 pt-0.5 border-t border-gray-200/60">
+          <div className="flex items-baseline gap-1">
+            <span className="text-[15px] text-gray-400 w-8 shrink-0">水分</span>
+            <span className="text-[24px] font-bold text-blue-600 leading-none">
+              {moisture.last_moisture_value ?? "--"}%
+            </span>
+            {moisture.moisture_setting !== null && (
+              <span className="text-[15px] text-gray-400">
+                / {moisture.moisture_setting}%
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-[15px] text-gray-400 w-8 shrink-0">穀溫</span>
+            <span className="text-[21px] font-bold text-amber-600">
+              {moisture.grain_temp ?? "--"}°C
+            </span>
+            {moisture.mode && (
+              <span
+                className={`text-[13px] px-1 py-0.5 rounded font-medium ${
+                  moisture.mode === "AUTO"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-gray-200 text-gray-500"
+                }`}
+              >
+                {moisture.mode}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Estimate */}
+      {estimate?.completionTimestamp != null && estimate.etaMinutes != null && (
+        <button
+          onClick={onTrend}
+          className="text-[15px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium active:bg-indigo-100 flex items-center gap-1 self-start"
+        >
+          <span className="text-[12px] bg-indigo-200 text-indigo-700 rounded px-0.5 font-bold">
+            估
+          </span>
+          {formatEstimateTime(estimate.completionTimestamp)} 完成
+          <span className="text-indigo-400">
+            ({formatEtaDuration(estimate.etaMinutes)})
+          </span>
+        </button>
       )}
 
       {/* Error display */}
       {hasError && (
-        <div className="mt-1 text-xs text-red-700 font-medium">
+        <div className="text-[18px] text-red-700 font-medium">
           {(dryer?.error_code ?? 0) > 0 &&
             `乾燥機 ${dryer?.error_name ?? `E-${dryer?.error_code}`} `}
           {(moisture?.error_code ?? 0) > 0 &&
             `水分計 ${moisture?.error_name ?? `E${moisture?.error_code}`}`}
         </div>
       )}
+
+      {/* Footer: trend button + updated time */}
+      <div className="mt-auto flex items-center justify-between pt-1">
+        <button
+          onClick={onTrend}
+          className="text-[15px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium active:bg-blue-100"
+        >
+          趨勢
+        </button>
+        <span className="text-[15px] text-gray-300">
+          {formatUpdatedAt(dryer?.updated_at, moisture?.updated_at)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -385,13 +389,13 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-3 py-2">
+        <div className="max-w-5xl mx-auto px-3 py-2">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-bold text-gray-900">
                 大橋米烘乾監控
               </h1>
-              <div className="flex gap-3 text-sm">
+              <div className="flex gap-3 text-[21px]">
                 <span className="text-green-600">
                   <span className="font-bold">{onlineCount}</span> 台連線
                 </span>
@@ -401,14 +405,15 @@ export function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <AlertBell alerts={alerts} />
               <button
                 onClick={handlePoll}
                 disabled={polling}
-                className="px-3 py-1.5 bg-blue-500 text-white text-xs font-bold rounded-lg disabled:opacity-50 active:bg-blue-600 shrink-0"
+                className="px-3 py-1.5 bg-blue-500 text-white text-[18px] font-bold rounded-lg disabled:opacity-50 active:bg-blue-600 shrink-0"
               >
                 {polling ? "更新中..." : "更新"}
               </button>
-              <div className="text-xs text-gray-400 text-right leading-relaxed">
+              <div className="text-[18px] text-gray-400 text-right leading-relaxed">
                 {lastUpdate ? (
                   <>
                     <div>
@@ -437,12 +442,10 @@ export function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-3 py-2">
-        <AlertBanner alerts={alerts} />
-
-        <div className="space-y-1.5">
+      <main className="max-w-5xl mx-auto px-3 py-2">
+        <div className="grid grid-cols-4 gap-2 auto-rows-fr">
           {devices.map(({ id, dryer, moisture }) => (
-            <DeviceRow
+            <DeviceBlock
               key={id}
               id={id}
               dryer={dryer}
