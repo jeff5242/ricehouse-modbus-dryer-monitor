@@ -157,14 +157,14 @@ function DeviceRow({ id, dryer, moisture, estimate, onTrend }: DeviceRowProps) {
         {isOnline && (
           <>
             <div className="flex items-baseline gap-1 shrink-0">
+              <span className="text-[10px] text-gray-400">熱風</span>
               <span className="text-sm font-bold text-red-500">
                 {dryer?.hot_air_temp ?? "--"}°C
               </span>
-              {dryer?.hot_air_temp !== dryer?.set_temp && (
-                <span className="text-xs text-gray-400">
-                  / {dryer?.set_temp ?? "--"}°C
-                </span>
-              )}
+              <span className="text-[10px] text-gray-400">/ 設定</span>
+              <span className="text-xs text-gray-500">
+                {dryer?.set_temp ?? "--"}°C
+              </span>
             </div>
 
             <div className="flex items-baseline gap-1 shrink-0">

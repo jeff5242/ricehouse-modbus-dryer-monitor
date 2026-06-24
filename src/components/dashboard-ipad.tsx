@@ -163,11 +163,10 @@ function DeviceBlock({ id, dryer, moisture, estimate, onTrend }: DeviceBlockProp
             <span className="text-[27px] font-bold text-red-500 leading-none">
               {dryer?.hot_air_temp ?? "--"}°C
             </span>
-            {dryer?.hot_air_temp !== dryer?.set_temp && (
-              <span className="text-[15px] text-gray-400">
-                / {dryer?.set_temp ?? "--"}°
-              </span>
-            )}
+            <span className="text-[15px] text-gray-400">/ 設定</span>
+            <span className="text-[18px] text-gray-500">
+              {dryer?.set_temp ?? "--"}°C
+            </span>
           </div>
 
           <div className="flex items-baseline gap-1">
