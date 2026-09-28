@@ -1,0 +1,8 @@
+node_modules
+.next
+dist
+test-results
+e2e
+.env*
+.vercel
+.git

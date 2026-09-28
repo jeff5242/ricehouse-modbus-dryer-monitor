@@ -1,0 +1,10 @@
+# 常駐 Modbus 輪詢器（不是網站）。建置：docker build -f Dockerfile.poller -t rhm-poller .
+FROM node:24-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src/lib ./src/lib
+COPY poller ./poller
+ENV NODE_ENV=production TZ=Asia/Taipei
+CMD ["npx", "tsx", "poller/main.ts"]
