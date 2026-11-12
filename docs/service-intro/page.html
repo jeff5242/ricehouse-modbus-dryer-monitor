@@ -1,0 +1,262 @@
+<title>烘乾機遠端監控服務介紹</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 版面：單欄文件，寬圖表區塊可外擴；三端（設備／電腦／手機）各一節，色彩取自看板本身的狀態色 */
+:root{
+  --bg:#f5f7f4; --surface:#ffffff; --ink:#14221d; --muted:#5b6b65; --line:#d9e0db;
+  --accent:#0d7d73; --accent-soft:#e0f1ee; --husk:#b9770e; --husk-soft:#fbf0db;
+  --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --info:#1d4ed8; --shot:#e9eeea;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1715; --surface:#17211e; --ink:#e9f0ec; --muted:#9aaba4; --line:#2a3833;
+  --accent:#4fc4b6; --accent-soft:#143530; --husk:#e6ad4c; --husk-soft:#352a14;
+  --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --info:#93b4ff; --shot:#0b110f; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f1715; --surface:#17211e; --ink:#e9f0ec; --muted:#9aaba4; --line:#2a3833;
+  --accent:#4fc4b6; --accent-soft:#143530; --husk:#e6ad4c; --husk-soft:#352a14;
+  --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --info:#93b4ff; --shot:#0b110f; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.75;margin:0}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:48px 72px;display:flex;flex-direction:column;gap:72px}
+h1,h2,h3{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:900;letter-spacing:.01em}
+h2{font-size:clamp(1.5rem,3.2vw,2rem);font-weight:900}
+h3{font-size:1.1rem;font-weight:700}
+p{margin:0;max-width:40em}
+.eyebrow{font-size:.82rem;letter-spacing:.16em;color:var(--accent);font-weight:700}
+.lede{font-size:1.15rem;color:var(--muted)}
+section{display:flex;flex-direction:column;gap:22px}
+header.top{display:flex;flex-direction:column;gap:18px;border-bottom:2px solid var(--ink);padding-bottom:32px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 28px;font-size:.92rem;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:700}
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.facts div{padding:16px 18px;border-right:1px solid var(--line)}
+.facts div:last-child{border-right:0}
+.facts b{display:block;font-size:1.6rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.2}
+.facts span{font-size:.86rem;color:var(--muted)}
+/* 架構圖 */
+.arch{display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr;align-items:stretch;gap:0}
+.tier{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tier>h3{font-size:.86rem;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.node{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
+.node b{display:block;font-size:.98rem}
+.node small{display:block;color:var(--muted);font-size:.82rem;line-height:1.5}
+.node.key{border-color:var(--accent);background:var(--accent-soft)}
+.node.husk{border-color:var(--husk);background:var(--husk-soft)}
+.link{font-family:var(--mono);font-size:.74rem;color:var(--muted);text-align:center;line-height:1.3}
+.link::before{content:"↓";display:block;color:var(--accent);font-size:1rem}
+.arrow{display:grid;place-items:center;color:var(--accent);font-size:1.4rem}
+table{border-collapse:collapse;width:100%;font-size:.94rem;background:var(--surface)}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:.8rem;letter-spacing:.08em;color:var(--muted);font-weight:700;white-space:nowrap}
+td:first-child{white-space:nowrap}
+td code,.mono{font-family:var(--mono);font-size:.88em}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.two>*{min-width:0}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}
+figcaption{font-size:.86rem;color:var(--muted)}
+figcaption b{color:var(--ink)}
+.browser{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--shot)}
+.browser .bar{display:flex;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--surface);font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+.browser .bar i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.browser img{display:block;width:100%}
+.phones{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.phone{border:6px solid #1b2622;border-radius:26px;overflow:hidden;background:#fff;aspect-ratio:390/844;max-width:100%}
+.phone img{display:block;width:100%}
+.demo-note{font-size:.84rem;color:var(--muted);border-left:3px solid var(--husk);padding-left:12px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 10px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.84rem;padding:3px 10px;border-radius:6px;color:#fff;font-weight:700}
+.line-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.lc{border-radius:14px;overflow:hidden;background:#fff;color:#333;border:1px solid var(--line);font-size:.86rem;min-width:0}
+.lc .h{color:#fff;font-weight:700;padding:11px 12px}
+.lc .b{padding:6px 14px 12px}
+.lc .r{display:flex;justify-content:space-between;gap:10px;margin-top:8px}
+.lc .r span{color:#888;white-space:nowrap}.lc .r b{text-align:right}
+.lc .btn{margin:0 12px 12px;color:#fff;text-align:center;border-radius:8px;padding:7px;font-weight:700}
+.photo{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--shot)}
+.photo img{display:block;width:100%}
+.pin{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:#f0b24a;color:#14221d;font-weight:900;font-size:.95rem;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
+ol.keys{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:.92rem}
+ol.keys li{display:grid;grid-template-columns:26px 1fr;gap:8px;align-items:start}
+ol.keys li i{font-style:normal;width:22px;height:22px;margin-top:3px;border-radius:50%;background:#f0b24a;color:#14221d;font-weight:900;font-size:.78rem;display:grid;place-items:center}
+ol.keys small{color:var(--muted);font-size:.86rem}
+video{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:#0e1b18}
+ul.plain{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:8px;max-width:42em}
+footer{border-top:2px solid var(--ink);padding-top:22px;display:flex;flex-wrap:wrap;gap:8px 32px;font-size:.9rem;color:var(--muted)}
+footer b{color:var(--ink)}
+@media (max-width:760px){
+  .facts{grid-template-columns:1fr 1fr}.facts div:nth-child(2){border-right:0}.facts div:nth-child(-n+2){border-bottom:1px solid var(--line)}
+  .arch{grid-template-columns:1fr}.arrow{transform:rotate(90deg);padding:4px}
+  .two,.line-cards{grid-template-columns:1fr}
+  .phones{grid-template-columns:1fr 1fr}
+}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">服務介紹 ・ 致 三久</div>
+  <h1>稻穀烘乾機遠端監控系統</h1>
+  <p class="lede">把三久乾燥機與 CS-R 水分計的 Modbus 資料接上雲端，讓米廠的人用手機、平板、電腦看全場烘乾狀況，烘完或異常時由 LINE 主動通知。</p>
+  <div class="meta"><span>導入場域 <b>大橋米／壽米屋</b></span><span>開發維運 <b>牛奶股份有限公司</b></span><span>文件日期 <b>2026-11-12</b></span></div>
+</header>
+
+<section>
+  <div class="facts">
+    <div><b>8 台</b><span>乾燥機＋水分計同時監看</span></div>
+    <div><b>5 分鐘</b><span>自動輪詢一次全場</span></div>
+    <div><b>3 種</b><span>LINE 通知：完成、達標、異常</span></div>
+    <div><b>0 台</b><span>現場需加裝的電腦或主機</span></div>
+  </div>
+  <p>現場只多一台串口轉網路的轉換器。資料讀取、儲存、推估與通知都在雲端執行，使用者不需要安裝 App，打開網址就能用，也能加到手機主畫面。</p>
+</section>
+
+<section id="arch">
+  <div class="eyebrow">系統架構</div>
+  <h2>從機台基板到手機，資料只走一條路</h2>
+  <div class="arch">
+    <div class="tier">
+      <h3>設備端（米廠現場）</h3>
+      <div class="node husk"><b>三久乾燥機 通訊基板</b><small>Slave ID 01H ・ 機台狀態、熱風溫度、定時、異常碼</small></div>
+      <div class="node husk"><b>CS-R 水分計 通訊基板</b><small>Slave ID 02H ・ 水分值、設定值、穀溫、穀物種類</small></div>
+      <div class="link">RS-485 串接 ・ Modbus RTU<br>9600, 8-N-2</div>
+      <div class="node"><b>Moxa NPort 5150A</b><small>串口轉乙太網路，TCP Server 模式</small></div>
+      <div class="node"><b>廠內路由器</b><small>固定 IP，對外開放單一連接埠</small></div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="tier">
+      <h3>雲端</h3>
+      <div class="node key"><b>常駐輪詢服務</b><small>每 5 分鐘連線到現場，送出 Modbus RTU 讀取指令、驗證 CRC、失敗自動重試</small></div>
+      <div class="link">解析暫存器 → 寫入</div>
+      <div class="node"><b>雲端資料庫</b><small>即時狀態、歷史讀值、烘乾批次、通知紀錄</small></div>
+      <div class="node"><b>烘乾推估</b><small>用最近的水分下降速率推算預計完成時間</small></div>
+      <div class="node"><b>通知判斷</b><small>烘乾完成、水分達標、設備異常</small></div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="tier">
+      <h3>使用端</h3>
+      <div class="node key"><b>手機管理端</b><small>列表式看板、趨勢圖、歷史批次</small></div>
+      <div class="node key"><b>電腦／平板端</b><small>方塊格看板，適合辦公室螢幕或現場平板常駐</small></div>
+      <div class="node"><b>LINE 官方帳號</b><small>主動推播，附「查看監控面板」按鈕</small></div>
+      <div class="link">畫面資料即時推送<br>不需手動重新整理</div>
+    </div>
+  </div>
+</section>
+
+<section id="device">
+  <div class="eyebrow">設備端</div>
+  <h2>接在三久原廠通訊基板上，不改機台</h2>
+  <p>我們使用三久提供的 Modbus 規格（大橋米 MODBUS R2）。兩塊通訊基板串在同一條 RS-485 上，由一台 NPort 5150A 轉成網路。系統目前只用 03H 讀取，不對機台下任何寫入指令。</p>
+  <div class="two">
+    <div class="tablebox"><table>
+      <tr><th>通訊參數</th><th>現場設定</th></tr>
+      <tr><td>協定</td><td>Modbus RTU（經 NPort 透通傳輸）</td></tr>
+      <tr><td>串口</td><td class="mono">9600, 8-N-2, RS-485 2-wire</td></tr>
+      <tr><td>功能碼</td><td class="mono">03H 讀取</td></tr>
+      <tr><td>單次讀取</td><td>最多 12 words</td></tr>
+      <tr><td>輪詢</td><td>每 5 分鐘，每筆指令最多重試 3 次</td></tr>
+      <tr><td>接線</td><td class="mono">D+ → Pin 4 ・ D- → Pin 8 ・ GND → Pin 5</td></tr>
+    </table></div>
+    <div class="tablebox"><table>
+      <tr><th>基板</th><th>位址</th><th>讀取內容</th></tr>
+      <tr><td>乾燥機<br><span class="mono">ID 01H</span></td><td class="mono">00x0H–00x4H</td><td>機種、運轉狀態、熱風溫度、設定溫度、定時、異常碼</td></tr>
+      <tr><td>水分計<br><span class="mono">ID 02H</span></td><td class="mono">0x00H–0x0FH</td><td>水分測定值、水分設定、穀溫、穀物種類、AUTO／STOP、異常碼、水分分布</td></tr>
+      <tr><td colspan="3" style="color:var(--muted);font-size:.86rem">x 為機台編號（0–F）。目前辨識的機種包含 PHS-130、PRO-300H(HB) 等 11 種機種代碼。</td></tr>
+    </table></div>
+  </div>
+  <h3>現場實體架構</h3>
+  <p>大橋米現場的配電箱。箱內只有三樣東西：兩塊三久通訊基板、一台 NPort、一顆電源供應器。</p>
+  <div class="two">
+    <figure>
+      <div class="photo"><img src="img/site-cabinet.jpg" alt="現場配電箱：上方是 Moxa NPort 5150A，下方是兩塊三久通訊基板與電源供應器">
+        <span class="pin" style="left:51%;top:39%">1</span><span class="pin" style="left:27%;top:66%">2</span><span class="pin" style="left:37%;top:83%">3</span><span class="pin" style="left:31%;top:17%">4</span></div>
+      <figcaption><b>配電箱全景。</b></figcaption>
+      <ol class="keys">
+        <li><i>1</i><span>Moxa NPort 5150A <small>上方接電源與網路線，下方 DB9 轉端子台接 RS-485</small></span></li>
+        <li><i>2</i><span>三久通訊基板 ×2 <small>一塊對乾燥機、一塊對水分計</small></span></li>
+        <li><i>3</i><span>電源供應器 <small>供電給兩塊基板</small></span></li>
+        <li><i>4</i><span>線管 <small>往機台的訊號線與網路線由此進出</small></span></li>
+      </ol>
+    </figure>
+    <figure>
+      <div class="photo"><img src="img/site-boards.jpg" alt="三久通訊基板近照：指撥開關、狀態燈、端子台，以及 NPort 的 DB9 端子台">
+        <span class="pin" style="left:39%;top:25%">1</span><span class="pin" style="left:66%;top:37%">2</span><span class="pin" style="left:27%;top:51%">3</span><span class="pin" style="left:17%;top:80%">4</span><span class="pin" style="left:60%;top:86%">5</span></div>
+      <figcaption><b>通訊基板近照。</b></figcaption>
+      <ol class="keys">
+        <li><i>1</i><span>指撥開關 SW1／SW2 <small>設定鮑率、機台數與站號（Address）</small></span></li>
+        <li><i>2</i><span>狀態燈 <small>Dryer/SB link、PLC/PC link、COMMAND、PROG. RUN</small></span></li>
+        <li><i>3</i><span>基板端子台 <small>電源、往機台的連線、往 NPort 的 RS-485</small></span></li>
+        <li><i>4</i><span>DB9 轉端子台 <small>兩塊基板的 RS-485 併接後進 NPort</small></span></li>
+        <li><i>5</i><span>NPort 5150A <small>Ready、Link、Tx/Rx 燈號正常</small></span></li>
+      </ol>
+    </figure>
+  </div>
+</section>
+
+<section id="pc">
+  <div class="eyebrow">電腦／平板端</div>
+  <h2>一個畫面看完全場</h2>
+  <p>每台機器一個方塊，用顏色分辨狀態。字體放大，站在機台旁或辦公室另一頭都看得清楚。</p>
+  <figure>
+    <div class="browser"><div class="bar"><i></i><i></i><i></i><span>&nbsp;大橋米烘乾監控 ／ipad</span></div><img src="img/pc-grid.png" alt="電腦端方塊格看板：8 台乾燥機的狀態、熱風溫度、水分、穀溫與預計完成時間"></div>
+    <figcaption><b>方塊格看板。</b>每格顯示機種、狀態、熱風／設定溫度、烘乾時間、水分／目標水分、穀溫。「估」是系統推算的完成時間，異常的機台整格轉紅並顯示原因。</figcaption>
+  </figure>
+  <div class="legend" aria-label="狀態顏色">
+    <span class="chip" style="background:#f97316">乾燥</span><span class="chip" style="background:#eab308">通風乾燥</span><span class="chip" style="background:#22c55e">乾燥完成</span><span class="chip" style="background:#3b82f6">入穀</span><span class="chip" style="background:#6b7280">停止</span><span class="chip" style="background:#dc2626">異常</span>
+  </div>
+  <div class="two">
+    <figure><div class="browser"><img src="img/pc-trend.png" alt="電腦端趨勢圖：溫度、水分、穀溫曲線"></div><figcaption><b>趨勢圖。</b>點任一台的「趨勢」，看 24 小時內的熱風溫度、水分、穀溫曲線。</figcaption></figure>
+    <figure><div class="browser"><img src="img/pc-bell.png" alt="電腦端通知中心：異常、烘乾完成、水分達標"></div><figcaption><b>通知中心。</b>鈴鐺收著尚未處理的通知，處理完可逐筆或全部清除。</figcaption></figure>
+  </div>
+  <p class="demo-note">本文件的看板畫面是實際系統的畫面，為了呈現烘乾中的樣子，數值使用示範資料。</p>
+</section>
+
+<section id="mobile">
+  <div class="eyebrow">手機管理端</div>
+  <h2>人不在廠裡，也知道烘到哪了</h2>
+  <p>手機版改成列表，一台一列，單手往下滑就能看完。點「趨勢」可以查這一批烘了多久、水分降多快、預計幾點完成，也能回頭翻歷史批次。</p>
+  <div class="phones">
+    <figure><div class="phone"><img src="img/m-list.png" alt="手機列表式看板"></div><figcaption><b>全場列表。</b>連線台數、乾燥中台數，以及每台的即時數值與預計完成時間。</figcaption></figure>
+    <figure><div class="phone"><img src="img/m-trend-moisture.png" alt="手機水分趨勢圖與烘乾推估"></div><figcaption><b>水分趨勢與烘乾推估。</b>已烘時間、水分變化、下降速率、預計完成時間。</figcaption></figure>
+    <figure><div class="phone"><img src="img/m-batches.png" alt="手機歷史批次"></div><figcaption><b>歷史批次。</b>每一批的起始水分、結束水分、目標與烘乾時數。</figcaption></figure>
+  </div>
+  <h3>LINE 主動通知</h3>
+  <p>下列三種情況會推播到米廠的 LINE，點按鈕直接開啟看板。</p>
+  <div class="line-cards">
+    <div class="lc"><div class="h" style="background:#16A34A">✅ 3號乾燥機烘乾完成！</div><div class="b"><div class="r"><span>烘乾時間</span><b>11小時25分</b></div><div class="r"><span>最終水分</span><b>15.1%</b></div><div class="r"><span>完成時間</span><b>2026/11/12 16:33</b></div></div><div class="btn" style="background:#16A34A">查看監控面板</div></div>
+    <div class="lc"><div class="h" style="background:#2563EB">✅ 3號水分已達標！</div><div class="b"><div class="r"><span>目前水分</span><b>15.1%</b></div><div class="r"><span>目標水分</span><b>15.2%</b></div><div class="r"><span>時間</span><b>2026/11/12 16:25</b></div></div><div class="btn" style="background:#2563EB">查看趨勢圖</div></div>
+    <div class="lc"><div class="h" style="background:#DC2626">🚨 設備異常警報</div><div class="b"><div class="r"><span>異常訊息</span><b>8號乾燥機：燃燒機熄火</b></div><div class="r"><span>時間</span><b>2026/11/12 16:50</b></div></div><div class="btn" style="background:#DC2626">查看監控面板</div></div>
+  </div>
+  <p class="demo-note">通知卡片依系統實際送出的欄位繪製，內容為示範資料。異常名稱直接對應三久規格書的異常碼，例如風壓開關異常、熱風檢知器異常、燃燒機熄火、各馬達過載。</p>
+</section>
+
+<section id="video">
+  <div class="eyebrow">操作影片 ・ 20 秒</div>
+  <h2>收到通知、看全場、查進度</h2>
+  <video controls playsinline preload="metadata" poster="img/video-poster.jpg" src="dryer-monitor-20s.mp4"></video>
+  <p class="demo-note">影片附中文語音旁白，與字幕的三個步驟對應。檔案：dryer-monitor-20s.mp4（1920×1080）。</p>
+</section>
+
+<section id="talk">
+  <div class="eyebrow">想與三久討論</div>
+  <h2>現場實測後的三個問題</h2>
+  <ul class="plain">
+    <li><b>RS-485 訊號品質。</b>現場實測 CRC 通過率約 50–60%，目前靠重試補足。想請教原廠對終端電阻、線材與串接長度的建議。</li>
+    <li><b>讀取上限與頻率。</b>單次最多 12 words，8 台全場讀一輪需要多筆指令。想確認原廠建議的最短輪詢間隔。</li>
+    <li><b>寫入功能（06H）。</b>目前只讀不寫。若未來要做遠端調整水分設定，想先了解原廠的安全限制與建議作法。</li>
+  </ul>
+</section>
+
+<footer>
+  <span><b>牛奶股份有限公司</b> MILK IDEA INC.</span>
+  <span>方乃正 Jeff Fang ・ 0936-923912</span>
+  <span>jeff@milkidea.com</span>
+  <span>臺北市中正區忠孝西路一段 45 號 9 樓之 5</span>
+</footer>
+
+</div>

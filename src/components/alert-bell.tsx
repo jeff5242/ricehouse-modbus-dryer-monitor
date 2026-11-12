@@ -102,7 +102,7 @@ export function AlertBell({ alerts: propAlerts }: AlertBellProps) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-[340px] max-w-[90vw] bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden">
+        <div className="fixed inset-x-2 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[340px] bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2">
             <span className="font-bold text-gray-800">通知</span>
             <div className="flex items-center gap-2">
