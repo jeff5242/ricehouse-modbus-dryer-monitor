@@ -95,6 +95,13 @@ footer b{color:var(--ink)}
   .facts{grid-template-columns:1fr 1fr}.facts div:nth-child(2){border-right:0}.facts div:nth-child(-n+2){border-bottom:1px solid var(--line)}
   .arch{grid-template-columns:1fr}.arrow{transform:rotate(90deg);padding:4px}
   .two,.line-cards{grid-template-columns:1fr}
+  .dlm tr:first-child{display:none}
+  .dlm tr{display:block;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .dlm tr:last-child{border-bottom:0}
+  .dlm td{display:block;padding:0;border:0;white-space:normal}
+  .dlm td:first-child{font-weight:700;margin-bottom:2px}
+  .dlm td:last-child{margin-top:6px;font-size:.86rem;color:var(--muted)}
+  .dlm td:last-child::before{content:"目前資料：";font-weight:700}
   .phones{grid-template-columns:1fr 1fr}
 }
 </style>
@@ -246,11 +253,23 @@ footer b{color:var(--ink)}
 
 <section id="talk">
   <div class="eyebrow">想與三久討論</div>
-  <h2>現場實測後的三個問題</h2>
+  <h2>從一間米廠的 8 台，到貴公司售出的每一台</h2>
+  <p>這套系統目前服務的是米廠：看全場、收通知、查進度。同樣的資料，對原廠可能有另一種用途，也就是設備生命週期管理（Device Lifecycle Management，DLM）。11/16 拜訪時，想先聽貴公司在這方面的作法與需求。</p>
+  <div class="tablebox"><table class="dlm">
+    <tr><th>階段</th><th>想請教貴公司</th><th>系統目前讀得到的資料</th></tr>
+    <tr><td>出廠／安裝</td><td>機台售出後，如何掌握安裝地點、啟用時間與目前的使用者？</td><td>機種代碼、機台編號</td></tr>
+    <tr><td>運轉</td><td>是否需要每台機器的使用統計，例如一季烘幾批、每批烘多久？</td><td>烘乾批次、起訖時間、水分變化</td></tr>
+    <tr><td>保養</td><td>保養是固定週期，還是依使用量？是否需要到期提醒？</td><td>可由批次紀錄累計使用量</td></tr>
+    <tr><td>故障</td><td>客戶報修時，維修人員出發前能否先知道異常內容？</td><td>異常碼、發生時間、發生前的溫度與水分曲線</td></tr>
+    <tr><td>升級</td><td>通訊基板與控制器的版本如何管理？能否由通訊讀出版本？</td><td>目前沒有，需請教原廠</td></tr>
+    <tr><td>汰換</td><td>如何判斷機台該汰換？是否會參考實際使用資料？</td><td>長期歷史資料</td></tr>
+  </table></div>
+  <p class="demo-note">「系統目前讀得到的資料」是大橋米單一場域 8 台的現況。跨客戶、跨場域的機隊管理需要另行規劃，並須先取得各米廠對資料使用的同意。</p>
+  <h3>另外三個技術問題</h3>
   <ul class="plain">
-    <li><b>RS-485 訊號品質。</b>現場實測 CRC 通過率約 50–60%，目前靠重試補足。想請教原廠對終端電阻、線材與串接長度的建議。</li>
-    <li><b>讀取上限與頻率。</b>單次最多 12 words，8 台全場讀一輪需要多筆指令。想確認原廠建議的最短輪詢間隔。</li>
-    <li><b>寫入功能（06H）。</b>目前只讀不寫。若未來要做遠端調整水分設定，想先了解原廠的安全限制與建議作法。</li>
+    <li><b>RS-485 訊號品質。</b>現場 CRC 通過率約 50–60%，想請教終端電阻與線材的建議。</li>
+    <li><b>輪詢間隔。</b>單次最多讀 12 words，想確認原廠建議的最短間隔。</li>
+    <li><b>寫入（06H）。</b>目前只讀不寫，想了解遠端調整設定的安全限制。</li>
   </ul>
 </section>
 
